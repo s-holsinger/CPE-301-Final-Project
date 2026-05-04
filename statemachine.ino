@@ -1,5 +1,6 @@
 // STATE MACHINE BACKBONE - will be expanded:)
 //Serial library used for debugging, will be deleted
+//Cydney made this code.
 
 //STATE (will be expanded later)
 volatile unsigned char currentState = 0; //0 = OFF, 1 = IDLE (for now)
