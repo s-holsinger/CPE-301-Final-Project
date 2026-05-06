@@ -1,10 +1,5 @@
 //Done by Cydney: needs to be fixed!!!!
 //Portion of the state: to be added in full code
-//Define states: Temporary example for placement 
-#define OFF_STATE 0
-#define IDLE_STATE 1
-#define ACTIVE_STATE 2
-#define ERROR_STATE 3
 
 //State untested, will be later. 
 
