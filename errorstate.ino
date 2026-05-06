@@ -1,7 +1,6 @@
-//Done by Cydney
+//Done by Cydney: needs to be fixed!!!!
 //Portion of the state: to be added in full code
-//Define states: could be added alr?  
-
+//Define states: Temporary example for placement 
 #define OFF_STATE 0
 #define IDLE_STATE 1
 #define ACTIVE_STATE 2
@@ -25,3 +24,21 @@ void resetSystemData(bool &errorActive, int &breathCount, float &expectedBreathT
   rapidBreathingCounter = 0;
   
 }
+//To be added into main code: 
+
+//Global variables: 
+//Above setup: -----
+//volatile unsigned char currentstate = OFF_STATE 
+//volatile Bool errorActive = false; 
+//------
+//Called in loop(): -----
+//handleError(currentState, errorActive); 
+//-------
+//Inside reset button logic: -----
+//resetSystemData(errorActive, breathCount, expectedBreathTime, rapidBreathingCounter);
+//currentState = IDLE_STATE;
+//--------
+//In loop: (Error state output)
+//if (currentState == ERROR_STATE) {
+  //Serial.println("STATE: ERROR");
+//}
