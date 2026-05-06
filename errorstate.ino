@@ -1,5 +1,5 @@
+//Done by Cydney
 //Portion of the state: to be added in full code
-
 //Define states: could be added alr?  
 
 #define OFF_STATE 0
