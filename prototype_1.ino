@@ -1,5 +1,7 @@
 /*
 Prototype 1
+//***Still to be edited
+//*Delete after implmented/ fixed: Buzzer code, RTC code, errorState code, Serial library funcions fixed
 
 Pins:
 Buttons:
