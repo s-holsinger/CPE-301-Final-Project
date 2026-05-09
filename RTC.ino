@@ -30,12 +30,6 @@ void UART_sendString(const char *str){
     str++;
   }
 }
-//Delay 
-//temp replacement
-
-//void simpleDelay(){
- // for (volatile long i = 0; i<300000; i++);
-//}
 
 void setup() {
   
