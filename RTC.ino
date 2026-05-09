@@ -88,5 +88,5 @@ UART_sendString(buffer);
   
 UART_sendString("\r\n");
 delay(60000);
-//simpleDelay();
+//change delay to UART functions
 }
