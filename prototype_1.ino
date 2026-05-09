@@ -21,6 +21,10 @@ Sensor:
 11: Trigger
 12: Echo
 
+RTC
+20: SDA
+21: SCL
+
 */
 
 volatile unsigned char currentState = 0; //0 = OFF, 1 = IDLE, 2 = ACTIVE, 3 = ERROR
