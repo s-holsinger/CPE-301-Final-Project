@@ -51,7 +51,6 @@ DateTime now = rtc.now();
   if (millis() - previousTime >= interval){
     previousTime = millis();
 
-  
   //for the YEAR
   itoa(now.year(), buffer, 10);
   UART_sendString(buffer);
@@ -89,6 +88,5 @@ DateTime now = rtc.now();
     
   UART_sendString("\r\n");
   //delay(60000);
-  //change delay to UART functions
   }
 }
