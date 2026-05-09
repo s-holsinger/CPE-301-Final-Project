@@ -54,44 +54,47 @@ void loop() {
 DateTime now = rtc.now();
   char buffer[12];
 
-if (millis() - previousTime
-  
-//for the YEAR
-itoa(now.year(), buffer, 10);
-UART_sendString(buffer);
-UART_sendChar('/');
-  
-//for the MONTH
-itoa(now.month(), buffer, 10);
-UART_sendString(buffer);
-UART_sendChar('/');
-  
-//for the DAY
-itoa(now.day(), buffer, 10);
-UART_sendString(buffer);
-UART_sendChar('/');
-  
-//day of the week
-UART_sendString("(");
-UART_sendString(daysOfTheWeek[now.dayOfTheWeek()]);
-UART_sendString(")");
-  
-//for the HOUR
-UART_sendString(" ");
-itoa(now.hour(), buffer, 10);
-UART_sendString(buffer);
-UART_sendChar(':');
+  if (millis() - previousTime >= interval){
+    previousTime = millis();
 
-//for the Minute
-itoa(now.minute(), buffer, 10);
-UART_sendString(buffer);
-UART_sendChar(':');
-
-//for the Second
-itoa(now.second(), buffer, 10);
-UART_sendString(buffer);
   
-UART_sendString("\r\n");
-delay(60000);
-//change delay to UART functions
+  //for the YEAR
+  itoa(now.year(), buffer, 10);
+  UART_sendString(buffer);
+  UART_sendChar('/');
+    
+  //for the MONTH
+  itoa(now.month(), buffer, 10);
+  UART_sendString(buffer);
+  UART_sendChar('/');
+    
+  //for the DAY
+  itoa(now.day(), buffer, 10);
+  UART_sendString(buffer);
+  UART_sendChar('/');
+    
+  //day of the week
+  UART_sendString("(");
+  UART_sendString(daysOfTheWeek[now.dayOfTheWeek()]);
+  UART_sendString(")");
+    
+  //for the HOUR
+  UART_sendString(" ");
+  itoa(now.hour(), buffer, 10);
+  UART_sendString(buffer);
+  UART_sendChar(':');
+  
+  //for the Minute
+  itoa(now.minute(), buffer, 10);
+  UART_sendString(buffer);
+  UART_sendChar(':');
+  
+  //for the Second
+  itoa(now.second(), buffer, 10);
+  UART_sendString(buffer);
+    
+  UART_sendString("\r\n");
+  //delay(60000);
+  //change delay to UART functions
+  }
 }
