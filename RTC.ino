@@ -23,7 +23,7 @@ void UART_sendChar(char data){
   UDR0 = data;
 }
 
-//SHould send string 
+//Should send string 
 void UART_sendString(const char *str){
   while (*str){
     UART_sendChar(*str);
@@ -47,9 +47,14 @@ UART_sendString("DS1307RTC Read Test");
 UART_sendString("-------------------");
 }
 
+unsigned long previousTime = 0;
+const unsigned long interval = 60000;
+
 void loop() {
 DateTime now = rtc.now();
   char buffer[12];
+
+if (millis() - previousTime
   
 //for the YEAR
 itoa(now.year(), buffer, 10);
