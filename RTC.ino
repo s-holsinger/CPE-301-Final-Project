@@ -34,23 +34,29 @@ void UART_sendString(const char *str){
 void setup() {
   
 UART_init(103);
-  
+
+
 rtc.begin();
+  //*updates RTC to real time----
+//rtc.adjust(DateTime(F(__DATE__),F(__TIME__)));
   
-UART_sendString("DS1307RTC Read Test");
-UART_sendString("-------------------");
+UART_sendString("DS1307RTC Read Test \r\n");
+UART_sendString("-------------------\r\n");
 }
 
 unsigned long previousTime = 0;
 const unsigned long interval = 60000;
 
 void loop() {
-DateTime now = rtc.now();
+
   char buffer[12];
 
   if (millis() - previousTime >= interval){
     previousTime = millis();
 
+    DateTime now = rtc.now();
+     UART_sendString("TEST\r\n");
+    
   //for the YEAR
   itoa(now.year(), buffer, 10);
   UART_sendString(buffer);
@@ -89,4 +95,5 @@ DateTime now = rtc.now();
   UART_sendString("\r\n");
   //delay(60000);
   }
+}
 }
