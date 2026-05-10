@@ -38,7 +38,7 @@ UART_init(103);
 
 rtc.begin();
   //*updates RTC to real time----
-//rtc.adjust(DateTime(F(__DATE__),F(__TIME__)));
+//rtc.adjust(DateTime(2026, 5, 9, 18, 14, 40));
   
 UART_sendString("DS1307RTC Read Test \r\n");
 UART_sendString("-------------------\r\n");
@@ -55,7 +55,7 @@ void loop() {
     previousTime = millis();
 
     DateTime now = rtc.now();
-     UART_sendString("TEST\r\n");
+     //UART_sendString("TEST\r\n");
     
   //for the YEAR
   itoa(now.year(), buffer, 10);
@@ -95,5 +95,4 @@ void loop() {
   UART_sendString("\r\n");
   //delay(60000);
   }
-}
 }
