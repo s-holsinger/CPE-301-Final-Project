@@ -48,7 +48,24 @@ TO-DO:
 RTC and logging (medium)
 Convert to GPIO (medium/hard)
 
+May 10, 2026
+Added RTC and Logging
+Updated Display
+TO-DO:
+Convert to GPIO (medium/hard)
+
+
 */
+
+#include <RTClib.h>
+#include <Wire.h>
+#include <stdlib.h>
+RTC_DS1307 rtc;
+char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday",
+"Friday", "Saturday"};
+unsigned long previousTime = 0;
+const unsigned long interval = 60000;
+char buffer[12];
 
 volatile unsigned char currentState = 0; //0 = OFF, 1 = IDLE, 2 = ACTIVE, 3 = ERROR
 
@@ -104,15 +121,14 @@ volatile unsigned char *myTIFR1 = (unsigned char*) 0x36;
 volatile unsigned int  *myTCNT1  = (unsigned  int*) 0x84;
 
 unsigned char lastState = 255;
-
+unsigned int errorCounter = 0; //For detecting out-of-range sensor values
+unsigned int errorCounterAlt = 0; //For detecting constant sensor data
 unsigned int potentiometerVal = 0;
+unsigned long potentiometerDisplayTime;
 
-//Start Button ISR-------------
-  void startISR() {
-    Serial.println("innterupt fired");
-    currentState = 1;
-  }
-//-------------------
+unsigned long loggingTime = 0;
+int logBreathCount = 0;
+
 
 //-------------------
 //UART (Serial I/O)
@@ -197,6 +213,53 @@ unsigned int potentiometerVal = 0;
   }
 //-------------------
 
+void printTimestamp() {
+
+  previousTime = millis();
+
+  DateTime now = rtc.now();
+    
+  //for the YEAR
+  itoa(now.year(), buffer, 10);
+  UART_sendString(buffer);
+  UART_printChar('/');
+    
+  //for the MONTH
+  itoa(now.month(), buffer, 10);
+  UART_sendString(buffer);
+  UART_printChar('/');
+    
+  //for the DAY
+  itoa(now.day(), buffer, 10);
+  UART_sendString(buffer);
+  UART_printChar(' ');
+
+  //for the Hour
+  itoa(now.hour(), buffer, 10);
+  UART_sendString(buffer);
+  UART_printChar(':');
+  
+  //for the Minute
+  itoa(now.minute(), buffer, 10);
+  UART_sendString(buffer);
+  UART_printChar(':');
+  
+  //for the Second
+  itoa(now.second(), buffer, 10);
+  UART_sendString(buffer);
+
+}
+
+//Start Button ISR-------------
+  void startISR() {
+    Serial.println("innterupt fired");
+    if (currentState != 3) {
+      currentState = 1;
+      potentiometerDisplayTime = millis();
+    }
+  }
+//-------------------
+
 //-------------------
 //SENSOR
   //Sensor settings that must be tuned and are constant.
@@ -253,8 +316,6 @@ unsigned int potentiometerVal = 0;
       //Do nothing
 
     } else if (breathGap > breathTimeout && !(currentState == 2)) { //If the breathing is too too slow:
-      Serial.println("");
-      Serial.println("BEEEEEEEEEEEEEEEEEEEEP: Slow Breathing");
       currentState = 2;
 
     } else if ((echoLength < breathThreshold) && (prevEchoLength > breathThreshold)) { //If the chest is rising and passes a threshold
@@ -263,8 +324,6 @@ unsigned int potentiometerVal = 0;
       }
 
       if (rapidBreathingCounter > rapidBreathingTolerance && !(currentState == 2)) { //If the number of consecutive short breaths is >rapidBreathingTolerance, the buzzer will activate.
-        Serial.println("");
-        Serial.println("BEEEEEEEEEEEEEEEEEEEEP: Rapid Breathing");
         currentState = 2;
 
         //In the actual system, we would keep the buzzer running until the RESET button was pressed.
@@ -274,19 +333,11 @@ unsigned int potentiometerVal = 0;
 
       } else {
         breathCount++; //Record a breath
-        Serial.println("");
-        Serial.print("Breath Count: ");
-        Serial.println(breathCount);
 
         //Print expected breath duration and time since the last breath.
         //If leaving the active state, print "Recalculating..." because we have insufficient data.
         if (currentState == 2) {
           Serial.println("Recalculating...");
-        } else {
-          Serial.print("Expected Time Between Breaths (ms): ");
-          Serial.println(expectedBreathTime);
-          Serial.print("Actual Time Between Breaths (ms): ");
-          Serial.println(millis() - prevMillis);
         }
 
         currentState = 1;
@@ -391,6 +442,10 @@ void setup() {
   *ddr_a |= (1 << 4);
   *ddr_a |= (1 << 6);
 
+  rtc.begin();
+
+  potentiometerVal = adc_read();
+  potentiometerDisplayTime = millis();
 }
 
 
@@ -399,21 +454,23 @@ void loop() {
   //700 units of range after clamping
   expectedBreathTime = (potentiometerVal > 900) ? (900) : (potentiometerVal); //Clamping
   expectedBreathTime = (potentiometerVal < 200) ? (200) : (potentiometerVal); //Clamping
-  expectedBreathTime = 3000 + 2.5 * (expectedBreathTime - 200); //Range: 3000 microseconds to 5035 microseconds
+  expectedBreathTime = 1000 + 5.7 * (expectedBreathTime - 200); //Range: 1000 microseconds to 5640 microseconds
   
-
   //Reset Button Logic--------------------
   if (currentState != 0) {
     if(!(*pin_g & (1 << 5))) { // pressed LOW
       currentState = 1;
+      errorCounter = 0;
+      potentiometerDisplayTime = millis();
 
-      Serial.println("RESET -> IDLE (DATA CLEARED)");
+      printTimestamp();
+      Serial.println(" - RESET");
 
       while (!(*pin_g & (1 << 5))); //wait release
     }
   }
   //Off Button Logic-----------------------
-  if (currentState != 0) {
+  if ((currentState != 0) && (currentState != 3)) {
     if(!(*pin_e & (1 << 5))) { // pressed LOW
       currentState = 0;
       
@@ -439,7 +496,8 @@ void loop() {
       *port_a &= !(1 << 6);
       *port_a |= (1 << 0);
 
-      Serial.println("STATE: OFF");
+      printTimestamp();
+      Serial.println(" - OFF");
     } else if (currentState == 1) {
       stop_buzzer();
 
@@ -447,12 +505,14 @@ void loop() {
       lcd.setCursor(0, 0);
       lcd.print("IDLE");
 
+      printTimestamp();
+      Serial.println(" - IDLE");
+
       *port_a &= !(1 << 0);
       *port_a &= !(1 << 4);
       *port_a &= !(1 << 6);
       *port_a |= (1 << 2);
 
-      Serial.println("STATE: IDLE");
     } else if (currentState == 2) {
       start_buzzer();
 
@@ -465,7 +525,9 @@ void loop() {
       *port_a &= !(1 << 6);
       *port_a |= (1 << 4);
 
-      Serial.println("STATE: ACTIVE");
+      printTimestamp();
+      Serial.println(" - ACTIVE");
+
     } else if (currentState == 3) {
       stop_buzzer();
 
@@ -478,16 +540,59 @@ void loop() {
       *port_a &= !(1 << 4);
       *port_a |= (1 << 6);
 
-      Serial.println("STATE: ERROR");
+      printTimestamp();
+      Serial.println(" - ERROR");
+
     }
   }
 
   //These activate repeatedtly
   if (currentState != 0) {
+    if (millis() - potentiometerDisplayTime > 50000) {
+      if (millis() - lastRefreshTime > 500) {
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("BPM:");
+        lcd.setCursor(0, 1);
+        lcd.print("ADC:");
+        lcd.setCursor(4, 0);
+        lcd.print(60000/expectedBreathTime);
+        lcd.setCursor(4, 1);
+        lcd.print(adc_read());
+        if (millis() - potentiometerDisplayTime > 60000) {
+          potentiometerDisplayTime = millis();
+        }
+        lastRefreshTime = millis();
+      }
+
+    } else {
+
     if (currentState == 1) {
+      do {
       //Idle Behavior
       getSensorData();
+      if (echoLength < 400 || echoLength > 25000) {
+        errorCounter += 2;
+      }
+      if (errorCounter > 0) {
+        errorCounter--;
+      }
+      if (errorCounter > 20) {
+        currentState = 3;
+        break;
+      }
       processBreathing();
+
+      if (millis() - loggingTime > 60000) {
+        loggingTime = millis();
+        printTimestamp();
+        UART_sendString(" - Sensor Data: ");
+        Serial.println(echoLength);
+        printTimestamp();
+        UART_sendString(" - BPM: ");
+        Serial.println(breathCount - logBreathCount);
+        logBreathCount = breathCount;
+      }
 
       lcd.setCursor(0, 1);
       lcd.print("SENSOR:");
@@ -502,11 +607,34 @@ void loop() {
         lcd.print(echoLength);
         lastRefreshTime = millis();
       }
+      } while (false);
       
     } else if (currentState == 2) {
       //Active Behavior
+      do {
       getSensorData();
+      if (echoLength < 400 || echoLength > 25000) {
+        errorCounter += 2;
+      }
+      if (errorCounter > 0) {
+        errorCounter--;
+      }
+      if (errorCounter > 20) {
+        currentState = 3;
+        break;
+      }
       processBreathing();
+
+      if (millis() - loggingTime > 60000) {
+        loggingTime = millis();
+        printTimestamp();
+        UART_sendString(" - Sensor Data: ");
+        Serial.println(echoLength);
+        printTimestamp();
+        UART_sendString(" - BPM: ");
+        Serial.println(breathCount - logBreathCount);
+        logBreathCount = breathCount;
+      }
 
       lcd.setCursor(0, 1);
       lcd.print("SENSOR:");
@@ -521,6 +649,7 @@ void loop() {
         lcd.print(echoLength);
         lastRefreshTime = millis();
       }
+      } while (false);
 
     } else if (currentState == 3) {
       //Error Behavior
@@ -541,6 +670,12 @@ void loop() {
       }
 
     }
+
+    }
   }
 }
 //-------------------
+
+
+
+
