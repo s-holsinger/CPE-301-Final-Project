@@ -61,9 +61,18 @@ Remaining tasks are trivial.
 TO-DO:
 Convert to GPIO (easy/medium)
 
+May 11, 2026
+Converted serial functions to GPIO.
+TO-DO
+Convert delay() to GPIO (easy)
+
 */
 
+
+
+
 #include <RTClib.h>
+#include <math.h>
 RTC_DS1307 rtc;
 char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday",
 "Friday", "Saturday"};
@@ -78,6 +87,8 @@ volatile unsigned char currentState = 0; //0 = OFF, 1 = IDLE, 2 = ACTIVE, 3 = ER
 //Pin 2 is PE4 (On Button)
 //Pin 3 is PE5 (Off Button)
 //Pin 4 is PG5 (Reset Button)
+//Pin 11 is PB5 (Trigger)
+//Pin 12 is PB6 (Echo)
 //Pin 13 is PB7 (Buzzer)
 //Pin 22 is PA0 (LED)
 //Pin 24 is PA4 (LED)
@@ -89,8 +100,9 @@ volatile unsigned char* port_e = (unsigned char*) 0x2E;
 volatile unsigned char* pin_g = (unsigned char*) 0x32;
 volatile unsigned char* ddr_g = (unsigned char*) 0x33;
 volatile unsigned char* port_g = (unsigned char*) 0x34;
-volatile unsigned char *portB = (unsigned char*) 0x25;
-volatile unsigned char *portDDRB = (unsigned char*) 0x24;
+volatile unsigned char* port_b = (unsigned char*) 0x25;
+volatile unsigned char* ddr_b = (unsigned char*) 0x24;
+volatile unsigned char* pin_b = (unsigned char*) 0x23;
 volatile unsigned char* ddr_a = (unsigned char*) 0x21;
 volatile unsigned char* port_a = (unsigned char*) 0x22;
 
@@ -158,6 +170,19 @@ int logBreathCount = 0;
     while((*myUCSR0A & TBE)==0);
     *myUDR0 = U0pdata;
   }
+  void UART_printInt(int num) {
+    int numDigitCount = floor(log10((double) num));
+    for (int i = numDigitCount; i >= 0; i--) {
+      UART_printChar( ((int) fmod(num, pow(10, i + 1))) / ((int) pow(10, i)) + 0x30);
+    }
+  }
+  void UART_printFloat(float num) {
+    UART_printInt((int) num);
+    UART_printChar('.');
+    UART_printChar( ((int) (fmod(num, 1.0) / 0.1)) + 0x30);
+    UART_printChar( ((int) (fmod(num + 0.01, 0.1) / 0.01)) + 0x30);
+    
+  }
   //Should send string
   //Cydney's
   void UART_sendString(const char *str){
@@ -167,76 +192,75 @@ int logBreathCount = 0;
     }
   }
 
-  void adc_init() {
-      // setup the A register
-    // set bit 7 to 1 to enable the ADC 
-    *my_ADCSRA |= 0b10000000;
-    // clear bit 5 to 0 to disable the ADC trigger mode
-    *my_ADCSRA &= 0b11011111;
-    // clear bit 3 to 0 to disable the ADC interrupt 
-    *my_ADCSRA &= 0b11110111;
-    // clear bit 0-2 to 0 to set prescaler selection to slow reading
-    *my_ADCSRA &= 0b11111000;
-      // setup the B register
-      // clear bit 3 to 0 to reset the channel and gain bits
-    *my_ADCSRB &= 0b11110111;
-    // clear bit 2-0 to 0 to set free running mode
-    *my_ADCSRB &= 0b11111000;
-      // setup the MUX Register
-    // clear bit 7 to 0 for AVCC analog reference
-    *my_ADMUX &= 0b01111111;
-      // set bit 6 to 1 for AVCC analog reference
-      *my_ADMUX |= 0b01000000;
-      // clear bit 5 to 0 for right adjust result
-      *my_ADMUX &= 0b11011111;
-    // clear bit 4-0 to 0 to reset the channel and gain bits
-    *my_ADMUX &= 0b11100000;
+  //Also Cydney's
+  void UART_printTimestamp() {
+
+    previousTime = millis();
+
+    DateTime now = rtc.now();
+    //for the Hour
+    UART_printInt(now.hour());
+    UART_printChar(':');
+    
+    //for the Minute
+    UART_printInt(now.minute());
+    UART_printChar(':');
+    
+    //for the Second
+    UART_printInt(now.second());
+
   }
 
-  //Returns the value of the ADC in channel 0.
-  unsigned int adc_read() { //Only works for channel 0
-    // clear the channel selection bits (MUX 4:0)
-    *my_ADMUX &= 0b11100000;
-
-    // clear the channel selection bits (MUX 5) hint: it's not in the ADMUX register
-    //It's in ADCSRB bit 3
-    *my_ADCSRB &= 0b11110111;
-  
-    // set the channel selection bits for channel 0
-    *my_ADMUX &= 0b11100000;
-    *my_ADCSRB &= 0b11110111;
-
-    // set bit 6 of ADCSRA to 1 to start a conversion
-    *my_ADCSRA |= 0b01000000;
-
-    // wait for the conversion to complete
-    while((*my_ADCSRA & 0x40) != 0);
-
-    // return the result in the ADC data register and format the data based on right justification (check the lecture slide)
-    unsigned int val = (*my_ADC_DATA & 0x03FF);
-    return val;
-  }
 //-------------------
 
-void printTimestamp() {
+void adc_init() {
+    // setup the A register
+  // set bit 7 to 1 to enable the ADC 
+  *my_ADCSRA |= 0b10000000;
+  // clear bit 5 to 0 to disable the ADC trigger mode
+  *my_ADCSRA &= 0b11011111;
+  // clear bit 3 to 0 to disable the ADC interrupt 
+  *my_ADCSRA &= 0b11110111;
+  // clear bit 0-2 to 0 to set prescaler selection to slow reading
+  *my_ADCSRA &= 0b11111000;
+    // setup the B register
+    // clear bit 3 to 0 to reset the channel and gain bits
+  *my_ADCSRB &= 0b11110111;
+  // clear bit 2-0 to 0 to set free running mode
+  *my_ADCSRB &= 0b11111000;
+    // setup the MUX Register
+  // clear bit 7 to 0 for AVCC analog reference
+  *my_ADMUX &= 0b01111111;
+    // set bit 6 to 1 for AVCC analog reference
+    *my_ADMUX |= 0b01000000;
+    // clear bit 5 to 0 for right adjust result
+    *my_ADMUX &= 0b11011111;
+  // clear bit 4-0 to 0 to reset the channel and gain bits
+  *my_ADMUX &= 0b11100000;
+}
 
-  previousTime = millis();
+//Returns the value of the ADC in channel 0.
+unsigned int adc_read() { //Only works for channel 0
+  // clear the channel selection bits (MUX 4:0)
+  *my_ADMUX &= 0b11100000;
 
-  DateTime now = rtc.now();
-  //for the Hour
-  itoa(now.hour(), buffer, 10);
-  UART_sendString(buffer);
-  UART_printChar(':');
-  
-  //for the Minute
-  itoa(now.minute(), buffer, 10);
-  UART_sendString(buffer);
-  UART_printChar(':');
-  
-  //for the Second
-  itoa(now.second(), buffer, 10);
-  UART_sendString(buffer);
+  // clear the channel selection bits (MUX 5) hint: it's not in the ADMUX register
+  //It's in ADCSRB bit 3
+  *my_ADCSRB &= 0b11110111;
 
+  // set the channel selection bits for channel 0
+  *my_ADMUX &= 0b11100000;
+  *my_ADCSRB &= 0b11110111;
+
+  // set bit 6 of ADCSRA to 1 to start a conversion
+  *my_ADCSRA |= 0b01000000;
+
+  // wait for the conversion to complete
+  while((*my_ADCSRA & 0x40) != 0);
+
+  // return the result in the ADC data register and format the data based on right justification (check the lecture slide)
+  unsigned int val = (*my_ADC_DATA & 0x03FF);
+  return val;
 }
 
 //Start Button ISR-------------
@@ -276,18 +300,24 @@ void printTimestamp() {
   void getSensorData() {
     //To activate the sensor, we need to send a 10 microsecond pulse via the trigger.
     //This will require a more accurate delay function, which we must reconstruct with a timer.
-    digitalWrite(TRIGGER, LOW);
+    // digitalWrite(TRIGGER, LOW);
+    *port_b &= !(1 << 5);
     delayMicroseconds(2);
-    digitalWrite(TRIGGER, HIGH);
+    // digitalWrite(TRIGGER, HIGH);
+    *port_b |= (1 << 5);
     delayMicroseconds(10);
-    digitalWrite(TRIGGER, LOW);
+    // digitalWrite(TRIGGER, LOW);
+    *port_b &= !(1 << 5);
 
     //Getting the sensor value
-    while (digitalRead(ECHO) == LOW) {} //Wait while the echo pin is low. The sensor is sending a pulse for detecting an object.
-    if (digitalRead(ECHO) == HIGH) { //When the echo pin is high, the sensor is waiting for the echo of the pulse.
+    // while (digitalRead(ECHO) == LOW) {} //Wait while the echo pin is low. The sensor is sending a pulse for detecting an object.
+    while (!(*pin_b & (1 << 6))) {}
+    // if (digitalRead(ECHO) == HIGH) { //When the echo pin is high, the sensor is waiting for the echo of the pulse.
+    if (*pin_b & (1 << 6)) {
       previousMicros = micros(); //Record the start time.
     }
-    while (digitalRead(ECHO) != LOW) {} //What until it's low again.
+    // while (digitalRead(ECHO) != LOW) {} //What until it's low again.
+    while (*pin_b & (1 << 6)) {}
     echoLength = micros() - previousMicros; //Record the total duration. This time is the total time it took for the echo to return to the arduno.
     //We can convert this to a distance by dividing it by the speed of sound. However, I'm not doing that because it's unneccessary.
 
@@ -304,32 +334,33 @@ void printTimestamp() {
       //Do nothing
 
     } else if (breathGap > breathTimeout && !(currentState == 2)) { //If the breathing is too too slow:
-      if (millis() > 10000) {
-        currentState = 2;
-      }
+
+      currentState = 2;
 
     } else if ((echoLength < breathThreshold) && (prevEchoLength > breathThreshold)) { //If the chest is rising and passes a threshold
       if (breathGap < rapidBreathingThreshold) { //Check for rapid breathing.
-        rapidBreathingCounter += 2;
+        if (rapidBreathingCounter < (rapidBreathingTolerance + 3)) {
+          rapidBreathingCounter += 2;
+        }
       }
 
       if (rapidBreathingCounter > rapidBreathingTolerance && !(currentState == 2)) { //If the number of consecutive short breaths is >rapidBreathingTolerance, the buzzer will activate.
-        if (millis() > 10000) {
-          currentState = 2;
-        }
+        
+        currentState = 2;
 
         rapidBreathingCounter = 2;
 
       } else {
         breathCount++; //Record a breath
-        printTimestamp();
-        Serial.print(" - Breath Count: ");
-        Serial.println(breathCount);
+        UART_printTimestamp();
+        UART_sendString(" - Breath Count: ");
+        UART_printInt(breathCount);
+        UART_sendString("\r\n");
 
-        //Print expected breath duration and time since the last breath.
         //If leaving the active state, print "Recalculating..." because we have insufficient data.
         if (currentState == 2) {
-          Serial.println("Recalculating...");
+          UART_sendString("Recalculating...");
+          UART_sendString("\r\n");
         }
 
         if (rapidBreathingCounter < 2) {currentState = 1;}
@@ -359,7 +390,7 @@ void printTimestamp() {
     if(buzzerRunning)
     {
       // XOR to toggle PB7
-      *portB ^= 0x80;
+      *port_b ^= 0x80;
     }
   }
 
@@ -392,14 +423,26 @@ void printTimestamp() {
     // set the flag to not running
     buzzerRunning = false;
     // set pin 13 LOW
-    *portB &= 0x7F;
+    *port_b &= 0x7F;
   }
 //-------------------
 
 //-------------------
 void setup() {
-  pinMode(TRIGGER, OUTPUT); //Set pin 9 as the trigger pin for the sensor.
-  pinMode(ECHO, INPUT); //Set pin 10 as the echo pin for the sensor.
+  //Set pin 11 as the trigger pin for the sensor. (output)
+  // pinMode(TRIGGER, OUTPUT);
+  *ddr_b |= (1 << 5);
+
+  //Set pin 12 as the echo pin for the sensor. (input)
+  //Pin 12 is PB6
+  //This should be the GPIO code, but it isn't working.
+  //I've tried switching it to an input with pullup, but that still doesn't work.
+  //I can still access the data with GPIO
+  //Please have mercy.
+  // *ddr_b &= !(1 << 6);
+  // *port_b &= !(1 << 6);
+  pinMode(ECHO, INPUT); //Set pin 12 as the echo pin for the sensor.
+  
   UART_init(9600);
   //Start Button ---------------------------
   *ddr_e &= ~(1 << 4);  //PIN 2 input
@@ -422,9 +465,9 @@ void setup() {
   adc_init();
 
   // Set pin 13 to output for buzzer
-  *portDDRB |= 0b10000000;
+  *ddr_b |= (1 << 7);
   // Set pin 13 LOW
-  *portB &= 0b01111111;
+  *port_b &= !(1 << 7);
   // Initialize the buzzer timer for normal mode, with the TOV interrupt enabled
   init_timer_one();
 
@@ -438,6 +481,8 @@ void setup() {
 
   potentiometerVal = adc_read();
   potentiometerDisplayTime = millis();
+
+  UART_sendString("\r\n");
 }
 
 
@@ -473,8 +518,8 @@ void loop() {
       *port_a &= !(1 << 6);
       *port_a |= (1 << 2);
 
-      printTimestamp();
-      Serial.println(" - RESET");
+      UART_printTimestamp();
+      UART_sendString(" - RESET\r\n");
 
       while (!(*pin_g & (1 << 5))); //wait release
     }
@@ -506,8 +551,8 @@ void loop() {
       *port_a &= !(1 << 6);
       *port_a |= (1 << 0);
 
-      printTimestamp();
-      Serial.println(" - OFF");
+      UART_printTimestamp();
+      UART_sendString(" - OFF\r\n");
     } else if (currentState == 1) {
       stop_buzzer();
 
@@ -515,8 +560,8 @@ void loop() {
       lcd.setCursor(0, 0);
       lcd.print("IDLE");
 
-      printTimestamp();
-      Serial.println(" - IDLE");
+      UART_printTimestamp();
+      UART_sendString(" - IDLE\r\n");
 
       *port_a &= !(1 << 0);
       *port_a &= !(1 << 4);
@@ -535,8 +580,8 @@ void loop() {
       *port_a &= !(1 << 6);
       *port_a |= (1 << 4);
 
-      printTimestamp();
-      Serial.println(" - ACTIVE");
+      UART_printTimestamp();
+      UART_sendString(" - ACTIVE\r\n");
 
     } else if (currentState == 3) {
       stop_buzzer();
@@ -550,8 +595,8 @@ void loop() {
       *port_a &= !(1 << 4);
       *port_a |= (1 << 6);
 
-      printTimestamp();
-      Serial.println(" - ERROR");
+      UART_printTimestamp();
+      UART_sendString(" - ERROR\r\n");
 
     }
   }
@@ -586,12 +631,14 @@ void loop() {
 
       if (millis() - loggingTime > 60000) {
         loggingTime = millis();
-        printTimestamp();
+        UART_printTimestamp();
         UART_sendString(" - Sensor Data: ");
-        Serial.println(echoLength);
-        printTimestamp();
+        UART_printFloat(echoLength);
+        UART_sendString("\r\n");
+        UART_printTimestamp();
         UART_sendString(" - BPM: ");
-        Serial.println(breathCount - logBreathCount);
+        UART_printInt(breathCount - logBreathCount);
+        UART_sendString("\r\n");
         logBreathCount = breathCount;
       }
 
@@ -627,7 +674,6 @@ void loop() {
         }
       }
 
-
       } while (false);
       
     } else if (currentState == 2) {
@@ -644,13 +690,13 @@ void loop() {
         currentState = 3;
         break;
       }
-      if (abs(echoLength - prevEchoLength) < 10) {
+      if (abs(echoLength - prevEchoLength) < 10) { //If the sensor data is constant. I.E. completely stationary object in front of the sensor.
         errorCounterAlt += 2;
       }
       if (errorCounterAlt > 0) {
         errorCounterAlt--;
       }
-      if (errorCounterAlt > 200) {
+      if (errorCounterAlt > 200) { //Enter error state
         currentState = 3;
         break;
       }
@@ -658,12 +704,14 @@ void loop() {
 
       if (millis() - loggingTime > 60000) {
         loggingTime = millis();
-        printTimestamp();
-        Serial.println("");
+        UART_printTimestamp();
+        UART_sendString("\r\n");
         UART_sendString(" - Sensor Data: ");
-        Serial.println(echoLength);
+        UART_printFloat(echoLength);
+        UART_sendString("\r\n");
         UART_sendString(" - BPM: ");
-        Serial.println(breathCount - logBreathCount);
+        UART_printInt(breathCount - logBreathCount);
+        UART_sendString("\r\n");
         logBreathCount = breathCount;
       }
 
