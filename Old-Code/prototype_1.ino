@@ -54,12 +54,16 @@ Updated Display
 TO-DO:
 Convert to GPIO (medium/hard)
 
+May 11, 2026
+Debugging--tweaked some values and moved some things around.
+This code was written yesterday and used for the video.
+Remaining tasks are trivial.
+TO-DO:
+Convert to GPIO (easy/medium)
 
 */
 
 #include <RTClib.h>
-#include <Wire.h>
-#include <stdlib.h>
 RTC_DS1307 rtc;
 char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday",
 "Friday", "Saturday"};
@@ -132,16 +136,17 @@ int logBreathCount = 0;
 
 //-------------------
 //UART (Serial I/O)
+  //From previous labs
   //Functions for serial I/O
   void UART_init(int U0baud) {
-  unsigned long FCPU = 16000000;
-  unsigned int tbaud;
-  tbaud = (FCPU / 16 / U0baud - 1);
-  // Same as (FCPU / (16 * U0baud)) - 1;
-  *myUCSR0A = 0x20;
-  *myUCSR0B = 0x18;
-  *myUCSR0C = 0x06;
-  *myUBRR0  = tbaud;
+    unsigned long FCPU = 16000000;
+    unsigned int tbaud;
+    tbaud = (FCPU / 16 / U0baud - 1);
+    // Same as (FCPU / (16 * U0baud)) - 1;
+    *myUCSR0A = 0x20;
+    *myUCSR0B = 0x18;
+    *myUCSR0C = 0x06;
+    *myUBRR0  = tbaud;
   }
   unsigned char UART_charReady() {
     return *myUCSR0A & RDA;
@@ -163,29 +168,29 @@ int logBreathCount = 0;
   }
 
   void adc_init() {
-    // setup the A register
-  // set bit 7 to 1 to enable the ADC 
-  *my_ADCSRA |= 0b10000000;
-  // clear bit 5 to 0 to disable the ADC trigger mode
-  *my_ADCSRA &= 0b11011111;
-  // clear bit 3 to 0 to disable the ADC interrupt 
-  *my_ADCSRA &= 0b11110111;
-  // clear bit 0-2 to 0 to set prescaler selection to slow reading
-  *my_ADCSRA &= 0b11111000;
-    // setup the B register
-    // clear bit 3 to 0 to reset the channel and gain bits
-  *my_ADCSRB &= 0b11110111;
-  // clear bit 2-0 to 0 to set free running mode
-  *my_ADCSRB &= 0b11111000;
-    // setup the MUX Register
-  // clear bit 7 to 0 for AVCC analog reference
-  *my_ADMUX &= 0b01111111;
-    // set bit 6 to 1 for AVCC analog reference
-    *my_ADMUX |= 0b01000000;
-    // clear bit 5 to 0 for right adjust result
-    *my_ADMUX &= 0b11011111;
-  // clear bit 4-0 to 0 to reset the channel and gain bits
-  *my_ADMUX &= 0b11100000;
+      // setup the A register
+    // set bit 7 to 1 to enable the ADC 
+    *my_ADCSRA |= 0b10000000;
+    // clear bit 5 to 0 to disable the ADC trigger mode
+    *my_ADCSRA &= 0b11011111;
+    // clear bit 3 to 0 to disable the ADC interrupt 
+    *my_ADCSRA &= 0b11110111;
+    // clear bit 0-2 to 0 to set prescaler selection to slow reading
+    *my_ADCSRA &= 0b11111000;
+      // setup the B register
+      // clear bit 3 to 0 to reset the channel and gain bits
+    *my_ADCSRB &= 0b11110111;
+    // clear bit 2-0 to 0 to set free running mode
+    *my_ADCSRB &= 0b11111000;
+      // setup the MUX Register
+    // clear bit 7 to 0 for AVCC analog reference
+    *my_ADMUX &= 0b01111111;
+      // set bit 6 to 1 for AVCC analog reference
+      *my_ADMUX |= 0b01000000;
+      // clear bit 5 to 0 for right adjust result
+      *my_ADMUX &= 0b11011111;
+    // clear bit 4-0 to 0 to reset the channel and gain bits
+    *my_ADMUX &= 0b11100000;
   }
 
   //Returns the value of the ADC in channel 0.
@@ -218,22 +223,6 @@ void printTimestamp() {
   previousTime = millis();
 
   DateTime now = rtc.now();
-    
-  //for the YEAR
-  itoa(now.year(), buffer, 10);
-  UART_sendString(buffer);
-  UART_printChar('/');
-    
-  //for the MONTH
-  itoa(now.month(), buffer, 10);
-  UART_sendString(buffer);
-  UART_printChar('/');
-    
-  //for the DAY
-  itoa(now.day(), buffer, 10);
-  UART_sendString(buffer);
-  UART_printChar(' ');
-
   //for the Hour
   itoa(now.hour(), buffer, 10);
   UART_sendString(buffer);
@@ -252,7 +241,6 @@ void printTimestamp() {
 
 //Start Button ISR-------------
   void startISR() {
-    Serial.println("innterupt fired");
     if (currentState != 3) {
       currentState = 1;
       potentiometerDisplayTime = millis();
@@ -316,7 +304,9 @@ void printTimestamp() {
       //Do nothing
 
     } else if (breathGap > breathTimeout && !(currentState == 2)) { //If the breathing is too too slow:
-      currentState = 2;
+      if (millis() > 10000) {
+        currentState = 2;
+      }
 
     } else if ((echoLength < breathThreshold) && (prevEchoLength > breathThreshold)) { //If the chest is rising and passes a threshold
       if (breathGap < rapidBreathingThreshold) { //Check for rapid breathing.
@@ -324,15 +314,17 @@ void printTimestamp() {
       }
 
       if (rapidBreathingCounter > rapidBreathingTolerance && !(currentState == 2)) { //If the number of consecutive short breaths is >rapidBreathingTolerance, the buzzer will activate.
-        currentState = 2;
+        if (millis() > 10000) {
+          currentState = 2;
+        }
 
-        //In the actual system, we would keep the buzzer running until the RESET button was pressed.
-        //Here, the system will resume after breathing returns to normal levels.
-        //This assignment is neccessary to do that.
         rapidBreathingCounter = 2;
 
       } else {
         breathCount++; //Record a breath
+        printTimestamp();
+        Serial.print(" - Breath Count: ");
+        Serial.println(breathCount);
 
         //Print expected breath duration and time since the last breath.
         //If leaving the active state, print "Recalculating..." because we have insufficient data.
@@ -340,7 +332,7 @@ void printTimestamp() {
           Serial.println("Recalculating...");
         }
 
-        currentState = 1;
+        if (rapidBreathingCounter < 2) {currentState = 1;}
         if (rapidBreathingCounter > 0) {rapidBreathingCounter--;}
         prevMillis = millis(); //Update/record the time of the breath.
       }
@@ -459,9 +451,27 @@ void loop() {
   //Reset Button Logic--------------------
   if (currentState != 0) {
     if(!(*pin_g & (1 << 5))) { // pressed LOW
+      lastState = 255;
       currentState = 1;
       errorCounter = 0;
+      logBreathCount = 0;
+      breathCount = 0;
+      errorCounter = 0;
+      errorCounterAlt = 0;
+      potentiometerVal = 0;
       potentiometerDisplayTime = millis();
+      lastRefreshTime = millis();
+      previousTime = millis();
+      loggingTime = millis();
+      rapidBreathingCounter = 0;
+      echoLength = 0;
+      prevEchoLength = 0;
+      breathGap = rapidBreathingThreshold;
+
+      *port_a &= !(1 << 0);
+      *port_a &= !(1 << 4);
+      *port_a &= !(1 << 6);
+      *port_a |= (1 << 2);
 
       printTimestamp();
       Serial.println(" - RESET");
@@ -478,7 +488,7 @@ void loop() {
     }
   }
 
-  if (currentState != lastState) {//WHOLE IF STATEMENT TEMP FOR TEST***
+  if (currentState != lastState) {//On state-change
     
     lastState = currentState;
   
@@ -548,36 +558,27 @@ void loop() {
 
   //These activate repeatedtly
   if (currentState != 0) {
-    if (millis() - potentiometerDisplayTime > 50000) {
-      if (millis() - lastRefreshTime > 500) {
-        lcd.clear();
-        lcd.setCursor(0, 0);
-        lcd.print("BPM:");
-        lcd.setCursor(0, 1);
-        lcd.print("ADC:");
-        lcd.setCursor(4, 0);
-        lcd.print(60000/expectedBreathTime);
-        lcd.setCursor(4, 1);
-        lcd.print(adc_read());
-        if (millis() - potentiometerDisplayTime > 60000) {
-          potentiometerDisplayTime = millis();
-        }
-        lastRefreshTime = millis();
-      }
-
-    } else {
-
     if (currentState == 1) {
       do {
       //Idle Behavior
       getSensorData();
-      if (echoLength < 400 || echoLength > 25000) {
+      if (echoLength < 400 || echoLength > 5000) {
         errorCounter += 2;
       }
       if (errorCounter > 0) {
         errorCounter--;
       }
       if (errorCounter > 20) {
+        currentState = 3;
+        break;
+      }
+      if (abs(echoLength - prevEchoLength) < 10) {
+        errorCounterAlt += 2;
+      }
+      if (errorCounterAlt > 0) {
+        errorCounterAlt--;
+      }
+      if (errorCounterAlt > 200) {
         currentState = 3;
         break;
       }
@@ -594,32 +595,62 @@ void loop() {
         logBreathCount = breathCount;
       }
 
-      lcd.setCursor(0, 1);
-      lcd.print("SENSOR:");
+      if (millis() - potentiometerDisplayTime > 20000) {
+        if (millis() - lastRefreshTime > 500) {
+          lcd.clear();
+          lcd.setCursor(0, 0);
+          lcd.print("BPM:");
+          lcd.setCursor(0, 1);
+          lcd.print("ADC:");
+          lcd.setCursor(4, 0);
+          lcd.print(60000/expectedBreathTime);
+          lcd.setCursor(4, 1);
+          lcd.print(adc_read());
+          if (millis() - potentiometerDisplayTime > 30000) {
+            potentiometerDisplayTime = millis();
+          }
+          lastRefreshTime = millis();
+        }
+      } else {
+        lcd.setCursor(0, 1);
+        lcd.print("SENSOR:");
 
-      if (millis() - lastRefreshTime > 500) {
-        lcd.clear();
-        
-        lcd.setCursor(0, 0);
-        lcd.print("IDLE");
+        if (millis() - lastRefreshTime > 500) {
+          lcd.clear();
+          
+          lcd.setCursor(0, 0);
+          lcd.print("IDLE");
 
-        lcd.setCursor(7, 1);
-        lcd.print(echoLength);
-        lastRefreshTime = millis();
+          lcd.setCursor(7, 1);
+          lcd.print(echoLength);
+          lastRefreshTime = millis();
+        }
       }
+
+
       } while (false);
       
     } else if (currentState == 2) {
       //Active Behavior
       do {
       getSensorData();
-      if (echoLength < 400 || echoLength > 25000) {
+      if (echoLength < 400 || echoLength > 25000) { //If something is too close or too far from the sensor.
         errorCounter += 2;
       }
       if (errorCounter > 0) {
         errorCounter--;
       }
-      if (errorCounter > 20) {
+      if (errorCounter > 20) { //Enter ERROR state
+        currentState = 3;
+        break;
+      }
+      if (abs(echoLength - prevEchoLength) < 10) {
+        errorCounterAlt += 2;
+      }
+      if (errorCounterAlt > 0) {
+        errorCounterAlt--;
+      }
+      if (errorCounterAlt > 200) {
         currentState = 3;
         break;
       }
@@ -628,27 +659,46 @@ void loop() {
       if (millis() - loggingTime > 60000) {
         loggingTime = millis();
         printTimestamp();
+        Serial.println("");
         UART_sendString(" - Sensor Data: ");
         Serial.println(echoLength);
-        printTimestamp();
         UART_sendString(" - BPM: ");
         Serial.println(breathCount - logBreathCount);
         logBreathCount = breathCount;
       }
 
-      lcd.setCursor(0, 1);
-      lcd.print("SENSOR:");
+      if (millis() - potentiometerDisplayTime > 20000) {
+        if (millis() - lastRefreshTime > 500) {
+          lcd.clear();
+          lcd.setCursor(0, 0);
+          lcd.print("BPM:");
+          lcd.setCursor(0, 1);
+          lcd.print("ADC:");
+          lcd.setCursor(4, 0);
+          lcd.print(60000/expectedBreathTime);
+          lcd.setCursor(4, 1);
+          lcd.print(adc_read());
+          if (millis() - potentiometerDisplayTime > 30000) {
+            potentiometerDisplayTime = millis();
+          }
+          lastRefreshTime = millis();
+        }
+      } else {
+        lcd.setCursor(0, 1);
+        lcd.print("SENSOR:");
 
-      if (millis() - lastRefreshTime > 500) {
-        lcd.clear();
+        if (millis() - lastRefreshTime > 500) {
+          lcd.clear();
 
-        lcd.setCursor(0, 0);
-        lcd.print("ACTIVE");
+          lcd.setCursor(0, 0);
+          lcd.print("ACTIVE");
 
-        lcd.setCursor(7, 1);
-        lcd.print(echoLength);
-        lastRefreshTime = millis();
+          lcd.setCursor(7, 1);
+          lcd.print(echoLength);
+          lastRefreshTime = millis();
+        }
       }
+
       } while (false);
 
     } else if (currentState == 3) {
@@ -670,12 +720,6 @@ void loop() {
       }
 
     }
-
-    }
   }
 }
 //-------------------
-
-
-
-
