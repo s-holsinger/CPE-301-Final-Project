@@ -5,3 +5,5 @@ A circuit diagram is attached.
 The report is attached as well.
 
 Our old files are also attached, but everything you should need is in final-results.
+
+The video is in a drive. The hyperlink is in the report.
